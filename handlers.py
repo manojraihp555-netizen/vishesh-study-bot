@@ -1,10 +1,10 @@
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 from admin import is_admin
-from database import add_note
+from database import add_note, delete_note
 
-# Define conversation states
-CLASS, SUBJECT, TOPIC, FILE = range(4)
+# Define conversation states cleanly using range
+CLASS, SUBJECT, TOPIC, FILE, DELETE_TOPIC = range(5)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Existing /start command handler."""
@@ -41,9 +41,7 @@ async def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return ConversationHandler.END
 
-    # Clear any leftover data
     context.user_data.clear()
-    
     await update.message.reply_text("📚 Enter Class:")
     return CLASS
 
@@ -77,7 +75,6 @@ async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         file_name = message.document.file_name or "document.pdf"
         file_type = "document"
     elif message.photo:
-        # Get the largest photo
         largest_photo = message.photo[-1]
         file_id = largest_photo.file_id
         file_name = "Photo"
@@ -86,12 +83,10 @@ async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await message.reply_text("❌ Please send only PDF or Photo.")
         return FILE
 
-    # Retrieve stored data
     student_class = context.user_data.get("class")
     subject = context.user_data.get("subject")
     topic = context.user_data.get("topic")
 
-    # Save using the existing add_note function
     add_note(
         student_class,
         subject,
@@ -110,13 +105,43 @@ async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data.clear()
     return ConversationHandler.END
 
+# --- Delete Note Conversation Handlers ---
+
+async def deletenote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point for /deletenote command."""
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return ConversationHandler.END
+
+    context.user_data.clear()
+    await update.message.reply_text("🗑️ Enter Topic to delete:")
+    return DELETE_TOPIC
+
+async def received_delete_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receive the topic, call delete_note, and give feedback."""
+    topic = update.message.text.strip()
+    
+    success = delete_note(topic)
+
+    if success:
+        await update.message.reply_text("✅ Note Deleted Successfully.")
+    else:
+        await update.message.reply_text("❌ No note found with this topic.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# --- Shared Cancel Handler ---
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel the current conversation."""
     context.user_data.clear()
     await update.message.reply_text("❌ Operation Cancelled.")
     return ConversationHandler.END
 
-# Define the ConversationHandler to be imported in bot.py
+# --- Conversation Handlers Registration ---
+
 add_note_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("addnote", addnote_start)],
     states={
@@ -129,6 +154,14 @@ add_note_conv_handler = ConversationHandler(
                 received_file,
             )
         ],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
+
+delete_note_conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("deletenote", deletenote_start)],
+    states={
+        DELETE_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_delete_topic)],
     },
     fallbacks=[CommandHandler("cancel", cancel)],
 )
