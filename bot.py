@@ -7,7 +7,7 @@ from telegram.ext import (
 
 from config import TOKEN
 from database import init_db
-from handlers import start, help_command
+from handlers import start, help_command, myid
 
 # Logging setup
 logging.basicConfig(
@@ -28,6 +28,7 @@ def main():
     # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("myid", myid))
 
     logger.info("Vishesh Study Bot Started...")
 
