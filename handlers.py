@@ -15,5 +15,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/note - Search notes\n"
         "/allnotes - View all notes\n"
         "/addnote - Add a note (Admin)\n"
-        "/deletenote - Delete a note (Admin)"
+        "/deletenote - Delete a note (Admin)\n"
+        "/myid - Get your Telegram ID"
+    )
+
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"🆔 Your Telegram ID: {update.effective_user.id}"
     )
