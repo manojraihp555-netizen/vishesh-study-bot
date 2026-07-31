@@ -45,28 +45,29 @@ async def add_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    await update.message.reply_text(
-        "📚 Enter Class:"
-    )
-
+    await update.message.reply_text("📚 Enter Class:")
     return CLASS
 
 
 async def get_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["class"] = update.message.text
 
-    await update.message.reply_text(
-        "📖 Enter Subject:"
-    )
-
+    await update.message.reply_text("📖 Enter Subject:")
     return SUBJECT
 
 
 async def get_subject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["subject"] = update.message.text
 
+    await update.message.reply_text("📝 Enter Topic:")
+    return TOPIC
+
+
+async def get_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["topic"] = update.message.text
+
     await update.message.reply_text(
-        "📝 Enter Topic:"
+        "📎 Now send the PDF or Photo."
     )
 
-    return TOPIC
+    return FILE
