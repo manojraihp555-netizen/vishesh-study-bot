@@ -5,16 +5,19 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
 from admin import is_admin
 
 # Conversation States
 CLASS, SUBJECT, TOPIC, FILE = range(4)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📚 Welcome to Vishesh Study Bot!\n\n"
         "Use /help to see available commands."
     )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -28,10 +31,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/myid - Get your Telegram ID"
     )
 
+
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🆔 Your Telegram ID: {update.effective_user.id}"
     )
+
 
 async def add_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
@@ -46,6 +51,7 @@ async def add_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return CLASS
 
+
 async def get_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["class"] = update.message.text
 
@@ -54,6 +60,8 @@ async def get_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return SUBJECT
+
+
 async def get_subject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["subject"] = update.message.text
 
