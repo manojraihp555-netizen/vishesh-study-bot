@@ -54,3 +54,11 @@ async def get_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return SUBJECT
+async def get_subject(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["subject"] = update.message.text
+
+    await update.message.reply_text(
+        "📝 Enter Topic:"
+    )
+
+    return TOPIC
