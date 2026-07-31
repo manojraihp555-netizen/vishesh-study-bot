@@ -45,3 +45,12 @@ async def add_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return CLASS
+
+async def get_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["class"] = update.message.text
+
+    await update.message.reply_text(
+        "📖 Enter Subject:"
+    )
+
+    return SUBJECT
