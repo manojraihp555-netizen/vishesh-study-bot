@@ -1,6 +1,5 @@
 import logging
 from telegram.ext import ApplicationBuilder, CommandHandler
-
 from config import TOKEN
 from database import init_db
 from handlers import (
@@ -8,6 +7,7 @@ from handlers import (
     help_command,
     myid,
     add_note_conv_handler,
+    delete_note_conv_handler,
 )
 
 logging.basicConfig(
@@ -28,6 +28,7 @@ def main():
     application.add_handler(CommandHandler("myid", myid))
 
     application.add_handler(add_note_conv_handler)
+    application.add_handler(delete_note_conv_handler)
 
     logger.info("Vishesh Study Bot Started...")
     application.run_polling()
