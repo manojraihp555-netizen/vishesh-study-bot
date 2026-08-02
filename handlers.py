@@ -6,6 +6,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+import sqlite3
 
 from database import (
     add_note,
@@ -176,21 +177,34 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("❌ No notes found.")
         return ConversationHandler.END
 
-    await update.message.reply_text(f"🔍 {len(results)} Notes Found\n\nSending...")
+    await update.message.reply_text(f"🔍 {len(results)} Notes Found. Sending...")
 
     for note in results[:20]:
-        _, student_class, subject, topic, file_id, file_type, file_name = note
+        try:
+            if isinstance(note, sqlite3.Row) or hasattr(note, "keys"):
+                student_class = note["student_class"]
+                subject = note["subject"]
+                topic = note["topic"]
+                file_id = note["file_id"]
+                file_type = note["file_type"]
+            else:
+                _, student_class, subject, topic, file_id, file_type, _ = note
 
-        caption = (
-            f"📚 Class: {student_class}\n"
-            f"📖 Subject: {subject}\n"
-            f"📝 Topic: {topic}"
-        )
+            caption = (
+                f"📚 Class: {student_class}\n"
+                f"📖 Subject: {subject}\n"
+                f"📝 Topic: {topic}"
+            )
 
-        if file_type == "document":
-            await update.message.reply_document(document=file_id, caption=caption)
-        elif file_type == "photo":
-            await update.message.reply_photo(photo=file_id, caption=caption)
+            if file_type == "document":
+                await update.message.reply_document(document=file_id, caption=caption)
+            elif file_type == "photo":
+                await update.message.reply_photo(photo=file_id, caption=caption)
+            else:
+                await update.message.reply_text(f"{caption}\n(File type not supported)")
+
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error sending file: {e}")
 
     return ConversationHandler.END
 
@@ -209,7 +223,12 @@ async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📚 Available Notes\n\n"
 
     for i, note in enumerate(notes, start=1):
-        _, student_class, subject, topic, _, _, _ = note
+        if isinstance(note, sqlite3.Row) or hasattr(note, "keys"):
+            student_class = note["student_class"]
+            subject = note["subject"]
+            topic = note["topic"]
+        else:
+            _, student_class, subject, topic, _, _, _ = note
 
         text += (
             f"{i}.\n"
@@ -242,13 +261,18 @@ async def received_old_topic(update: Update, context: ContextTypes.DEFAULT_TYPE)
     old_topic = update.message.text.strip()
     notes = search_notes(old_topic) or []
 
-    matching_note = next((n for n in notes if n[3].lower() == old_topic.lower()), None)
+    matching_note = None
+    for n in notes:
+        t = n["topic"] if (isinstance(n, sqlite3.Row) or hasattr(n, "keys")) else n[3]
+        if t.lower() == old_topic.lower():
+            matching_note = t
+            break
 
     if not matching_note:
         await update.message.reply_text("❌ Topic not found.")
         return ConversationHandler.END
 
-    context.user_data["old_topic"] = matching_note[3]
+    context.user_data["old_topic"] = matching_note
     await update.message.reply_text("📚 Enter New Class")
     return EDIT_NEW_CLASS
 
