@@ -215,12 +215,31 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     notes = get_all_notes() or []
 
-if not notes:
-    await
-        update.message.reply_text("❌ No notes available.")
+    if not notes:
+        await update.message.reply_text("❌ No notes available.")
         return
+
+    text = "📚 Available Notes\n\n"
+
+    for i, note in enumerate(notes, start=1):
+
+        _, student_class, subject, topic, _, _, _ = note
+
+        text += (
+            f"{i}.\n"
+            f"📚 {student_class}\n"
+            f"📖 {subject}\n"
+            f"📝 {topic}\n\n"
+        )
+
+    if len(text) > 4000:
+        text = text[:3900] + "\n..."
+
+    await update.message.reply_text(text)
 
     text = "📚 Available Notes\n\n"
 
