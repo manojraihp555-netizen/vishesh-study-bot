@@ -87,7 +87,7 @@ async def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 async def received_class(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["class"] = update.message.text.strip()
-    await update.message.reply_text("📖 Enter Subject")
+    await update.message.reply_text("📖 Enter Subject (e.g. Physics, Chemistry)")
     return SUBJECT
 
 
@@ -200,8 +200,6 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
                 await update.message.reply_document(document=file_id, caption=caption)
             elif file_type == "photo":
                 await update.message.reply_photo(photo=file_id, caption=caption)
-            else:
-                await update.message.reply_text(f"{caption}\n(File type not supported)")
 
         except Exception as e:
             await update.message.reply_text(f"❌ Error sending file: {e}")
@@ -210,7 +208,7 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 # ==========================================
-# ALL NOTES
+# ALL NOTES (Subject-wise & Line by Line)
 # ==========================================
 
 async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,9 +218,9 @@ async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ No notes available.")
         return
 
-    text = "📚 Available Notes\n\n"
-
-    for i, note in enumerate(notes, start=1):
+    # Group notes by Subject
+    grouped_notes = {}
+    for note in notes:
         if isinstance(note, sqlite3.Row) or hasattr(note, "keys"):
             student_class = note["student_class"]
             subject = note["subject"]
@@ -230,17 +228,22 @@ async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             _, student_class, subject, topic, _, _, _ = note
 
-        text += (
-            f"{i}.\n"
-            f"📚 {student_class}\n"
-            f"📖 {subject}\n"
-            f"📝 {topic}\n\n"
-        )
+        sub_key = subject.strip().title()
+        if sub_key not in grouped_notes:
+            grouped_notes[sub_key] = []
+        grouped_notes[sub_key].append((student_class, topic))
+
+    text = "📚 **Available Notes (Subject-wise)**\n"
+
+    for subject, items in sorted(grouped_notes.items()):
+        text += f"\n📖 **Subject: {subject}**\n"
+        for idx, (cls, topic) in enumerate(items, start=1):
+            text += f"   {idx}. Class: {cls} | Topic: {topic}\n"
 
     if len(text) > 4000:
         text = text[:3900] + "\n..."
 
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 
 # ==========================================
