@@ -70,7 +70,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 async
 def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    print("ADDNOTE COMMAND RECEIVED")
+    
 
     if not 
     is_admin(update.effective_user.id)
@@ -249,7 +249,7 @@ async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # EDIT NOTE
 # ==========================================
 
-async def editnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int: print("EDITNOTE COMMAND RECEIVED")
+async def editnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("❌ You are not authorized.")
