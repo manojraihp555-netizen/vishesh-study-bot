@@ -35,7 +35,6 @@ def get_connection():
 
 
 def add_note(student_class, subject, topic, file_id, file_type, file_name):
-    """Database mein naya note add karne ke liye"""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -47,14 +46,14 @@ def add_note(student_class, subject, topic, file_id, file_type, file_name):
         """, (
             student_class,
             subject,
-            topic,
+            topic.strip(),
             file_id,
             file_type,
             file_name
         ))
 
         conn.commit()
-        logger.info(f"Note added successfully: {subject} - {topic}")
+        logger.info(f"Note added: {topic}")
 
     except sqlite3.Error as e:
         logger.error(f"Database Error in add_note: {e}")
@@ -64,13 +63,13 @@ def add_note(student_class, subject, topic, file_id, file_type, file_name):
 
 
 def search_notes(query):
-    """Case-insensitive smart search"""
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
         cursor.execute("""
             SELECT
+                id,
                 student_class,
                 subject,
                 topic,
@@ -79,18 +78,17 @@ def search_notes(query):
                 file_name
             FROM notes
             WHERE
-                LOWER(topic) LIKE LOWER(?)
-                OR LOWER(subject) LIKE LOWER(?)
-                OR LOWER(student_class) LIKE LOWER(?)
+                LOWER(TRIM(topic)) LIKE LOWER(TRIM(?))
+                OR LOWER(TRIM(subject)) LIKE LOWER(TRIM(?))
+                OR LOWER(TRIM(student_class)) LIKE LOWER(TRIM(?))
+            ORDER BY student_class, subject, topic
         """, (
             f"%{query}%",
             f"%{query}%",
             f"%{query}%"
         ))
 
-        results = cursor.fetchall()
-        logger.info(f"Search: {query} ({len(results)} results)")
-        return results
+        return cursor.fetchall()
 
     except sqlite3.Error as e:
         logger.error(f"Database Error in search_notes: {e}")
@@ -101,26 +99,86 @@ def search_notes(query):
 
 
 def delete_note(topic):
-    """Topic ke basis par note delete kare"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        logger.info(f"Trying to delete topic: {topic}")
+
+        cursor.execute("""
+            DELETE FROM notes
+            WHERE LOWER(TRIM(topic)) = LOWER(TRIM(?))
+        """, (topic,))
+
+        conn.commit()
+
+        logger.info(f"Rows deleted: {cursor.rowcount}")
+
+        return cursor.rowcount > 0
+
+    except sqlite3.Error as e:
+        logger.error(f"Database Error in delete_note: {e}")
+        return False
+
+    finally:
+        conn.close()
+
+
+def get_all_notes():
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
         cursor.execute("""
-            DELETE FROM notes
-            WHERE LOWER(topic) = LOWER(?)
-        """, (topic,))
+            SELECT
+                id,
+                student_class,
+                subject,
+                topic,
+                file_id,
+                file_type,
+                file_name
+            FROM notes
+            ORDER BY student_class, subject, topic
+        """)
+
+        return cursor.fetchall()
+
+    except sqlite3.Error as e:
+        logger.error(f"Database Error in get_all_notes: {e}")
+        return []
+
+    finally:
+        conn.close()
+
+
+def update_note(old_topic, new_class, new_subject, new_topic):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            UPDATE notes
+            SET
+                student_class=?,
+                subject=?,
+                topic=?
+            WHERE LOWER(TRIM(topic)) = LOWER(TRIM(?))
+        """, (
+            new_class.strip(),
+            new_subject.strip(),
+            new_topic.strip(),
+            old_topic.strip()
+        ))
 
         conn.commit()
 
-        if cursor.rowcount > 0:
-            logger.info(f"Note deleted: {topic}")
-            return True
+        logger.info(f"Rows updated: {cursor.rowcount}")
 
-        return False
+        return cursor.rowcount > 0
 
     except sqlite3.Error as e:
-        logger.error(f"Database Error in delete_note: {e}")
+        logger.error(f"Database Error in update_note: {e}")
         return False
 
     finally:
