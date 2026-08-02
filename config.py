@@ -1,11 +1,4 @@
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-TOKEN = os.getenv("TOKEN")
-DB_FILE = "database.db"
-
-ADMIN_IDS = [
-    8119525298,
-]
+TOKEN = "YOUR_BOT_TOKEN_HERE"
+DB_FILE = "study_bot.db"
+ADMIN_IDS = [8119525298]
+GEMINI_API_KEY = "AQ.Ab8RN6IzGmyHdTOs1fRXgH7iiUCLnh04zJ78YGYzYs9D3fr-gA"
