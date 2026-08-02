@@ -16,6 +16,7 @@ from database import (
 )
 
 from admin import is_admin
+
 # ===== ADD NOTE =====
 CLASS = 0
 SUBJECT = 1
@@ -33,6 +34,8 @@ EDIT_OLD_TOPIC = 101
 EDIT_NEW_CLASS = 102
 EDIT_NEW_SUBJECT = 103
 EDIT_NEW_TOPIC = 104
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to Vishesh Study Bot!\n\n"
@@ -65,22 +68,17 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text("❌ Cancelled.")
     return ConversationHandler.END
-    # ==========================================
+
+
+# ==========================================
 # ADD NOTE
 # ==========================================
 
 async def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    
-
-    if not 
-    is_admin(update.effective_user.id)
-    :
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text("❌ You are not authorized.")
         return ConversationHandler.END
 
-    context.user_data.clear()
-    await update.message.reply_text("📚 Enter Class")
-    return CLASS
     context.user_data.clear()
     await update.message.reply_text("📚 Enter Class")
     return CLASS
@@ -105,7 +103,6 @@ async def received_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     file_id = None
     file_type = None
     file_name = ""
@@ -134,16 +131,15 @@ async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     )
 
     await update.message.reply_text("✅ Note Added Successfully.")
-
     context.user_data.clear()
-
     return ConversationHandler.END
-    # ==========================================
+
+
+# ==========================================
 # DELETE NOTE
 # ==========================================
 
 async def deletenote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("❌ You are not authorized.")
         return ConversationHandler.END
@@ -153,7 +149,6 @@ async def deletenote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def received_delete_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     topic = update.message.text.strip()
 
     if delete_note(topic):
@@ -169,30 +164,21 @@ async def received_delete_topic(update: Update, context: ContextTypes.DEFAULT_TY
 # ==========================================
 
 async def note_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
-    await update.message.reply_text(
-        "📝 Enter Class / Subject / Topic"
-    )
-
+    await update.message.reply_text("📝 Enter Class / Subject / Topic")
     return SEARCH_QUERY
 
 
 async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     query = update.message.text.strip()
-
     results = search_notes(query) or []
 
     if not results:
         await update.message.reply_text("❌ No notes found.")
         return ConversationHandler.END
 
-    await update.message.reply_text(
-        f"🔍 {len(results)} Notes Found\n\nSending..."
-    )
+    await update.message.reply_text(f"🔍 {len(results)} Notes Found\n\nSending...")
 
     for note in results[:20]:
-
         _, student_class, subject, topic, file_id, file_type, file_name = note
 
         caption = (
@@ -202,16 +188,9 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
         if file_type == "document":
-            await update.message.reply_document(
-                document=file_id,
-                caption=caption
-            )
-
+            await update.message.reply_document(document=file_id, caption=caption)
         elif file_type == "photo":
-            await update.message.reply_photo(
-                photo=file_id,
-                caption=caption
-            )
+            await update.message.reply_photo(photo=file_id, caption=caption)
 
     return ConversationHandler.END
 
@@ -221,7 +200,6 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
 # ==========================================
 
 async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     notes = get_all_notes() or []
 
     if not notes:
@@ -245,60 +223,49 @@ async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
+
 # ==========================================
 # EDIT NOTE
 # ==========================================
 
 async def editnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("❌ You are not authorized.")
         return ConversationHandler.END
 
     context.user_data.clear()
-
     await update.message.reply_text("📝 Enter Existing Topic")
-
     return EDIT_OLD_TOPIC
 
 
 async def received_old_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     old_topic = update.message.text.strip()
-
     notes = search_notes(old_topic) or []
 
-    if not notes:
+    matching_note = next((n for n in notes if n[3].lower() == old_topic.lower()), None)
+
+    if not matching_note:
         await update.message.reply_text("❌ Topic not found.")
         return ConversationHandler.END
 
-    context.user_data["old_topic"] = old_topic
-
+    context.user_data["old_topic"] = matching_note[3]
     await update.message.reply_text("📚 Enter New Class")
-
     return EDIT_NEW_CLASS
 
 
 async def received_new_class(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     context.user_data["new_class"] = update.message.text.strip()
-
     await update.message.reply_text("📖 Enter New Subject")
-
     return EDIT_NEW_SUBJECT
 
 
 async def received_new_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     context.user_data["new_subject"] = update.message.text.strip()
-
     await update.message.reply_text("📝 Enter New Topic")
-
     return EDIT_NEW_TOPIC
 
 
 async def received_new_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-
     success = update_note(
         context.user_data["old_topic"],
         context.user_data["new_class"],
@@ -312,7 +279,6 @@ async def received_new_topic(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❌ Update Failed.")
 
     context.user_data.clear()
-
     return ConversationHandler.END
 
 
@@ -374,4 +340,3 @@ edit_note_conv_handler = ConversationHandler(
     },
     fallbacks=[CommandHandler("cancel", cancel)],
 )
-   
