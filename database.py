@@ -9,6 +9,7 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
+    # Notes Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,6 +23,13 @@ def init_db():
         )
     """)
 
+    # Users Table (For Broadcast)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY
+        )
+    """)
+
     conn.commit()
     conn.close()
     logger.info("Database initialized successfully.")
@@ -31,6 +39,33 @@ def get_connection():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def add_user(user_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+        conn.commit()
+    except sqlite3.Error as e:
+        logger.error(f"Database Error in add_user: {e}")
+    finally:
+        conn.close()
+
+
+def get_all_users():
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT user_id FROM users")
+        results = cursor.fetchall()
+        user_ids = [row["user_id"] if isinstance(row, sqlite3.Row) else row[0] for row in results]
+        return user_ids
+    except sqlite3.Error as e:
+        logger.error(f"Database Error in get_all_users: {e}")
+        return []
+    finally:
+        conn.close()
 
 
 def add_note(student_class, subject, topic, file_id, file_type, file_name):
