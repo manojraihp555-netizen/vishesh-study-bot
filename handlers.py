@@ -174,7 +174,7 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     query = update.message.text.strip()
 
-    results = search_notes(query)
+    results = search_notes(query) or []
 
     if not results:
         await update.message.reply_text("❌ No notes found.")
@@ -215,10 +215,11 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    notes = get_all_notes()
+    notes = get_all_notes() or []
 
 if not notes:
-        await update.message.reply_text("❌ No notes available.")
+    await
+        update.message.reply_text("❌ No notes available.")
         return
 
     text = "📚 Available Notes\n\n"
@@ -260,7 +261,7 @@ async def received_old_topic(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     old_topic = update.message.text.strip()
 
-    notes = search_notes(old_topic)
+    notes = search_notes(old_topic) or []
 
     if not notes:
         await update.message.reply_text("❌ Topic not found.")
