@@ -7,16 +7,22 @@ from telegram.ext import (
     filters,
 )
 import sqlite3
+from google import genai
 
+from config import GEMINI_API_KEY
 from database import (
     add_note,
     delete_note,
     search_notes,
     get_all_notes,
     update_note,
+    add_user,
+    get_all_users,
 )
-
 from admin import is_admin
+
+# Gemini Client Initialize
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ===== ADD NOTE =====
 CLASS = 0
@@ -38,24 +44,30 @@ EDIT_NEW_TOPIC = 104
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    add_user(user_id)  # Save user for broadcast
+
     await update.message.reply_text(
         "👋 Welcome to Vishesh Study Bot!\n\n"
-        "Use /help to see all commands."
+        "📚 Use /help to see all commands.\n"
+        "🤖 You can also ask me any study question directly in chat!",
+        parse_mode="Markdown"
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📚 Available Commands\n\n"
-        "/start\n"
-        "/help\n"
-        "/myid\n"
-        "/note\n"
-        "/allnotes\n\n"
+        "/start - Start bot\n"
+        "/help - Show commands\n"
+        "/myid - Get your Telegram ID\n"
+        "/note - Search notes\n"
+        "/allnotes - View subject-wise notes\n\n"
         "Admin Commands:\n"
-        "/addnote\n"
-        "/deletenote\n"
-        "/editnote"
+        "/broadcast - Send notice to all users\n"
+        "/addnote - Add a new note\n"
+        "/deletenote - Delete a note\n"
+        "/editnote - Edit a note"
     )
 
 
@@ -72,6 +84,83 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==========================================
+# DIRECT AI CHAT (सवाल पूछें और जवाब पाएं)
+# ==========================================
+
+async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("in_conversation"):
+        return
+
+    user_question = update.message.text.strip()
+    
+    if user_question.startswith("/"):
+        return
+
+    await update.message.reply_chat_action("typing")
+
+    try:
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=user_question,
+        )
+        await update.message.reply_text(response.text)
+    except Exception as e:
+        await update.message.reply_text(f"❌ माफ कीजिए, जवाब देने में समस्या आई: {e}")
+
+
+# ==========================================
+# BROADCAST FEATURE (नोटिस भेजना)
+# ==========================================
+
+async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ You are not authorized.")
+        return
+
+    message_text = " ".join(context.args)
+    
+    if not message_text and not update.message.reply_to_message:
+        await update.message.reply_text(
+            "❌ कृपया नोटिस लिखें। उदाहरण:\n`/broadcast 📢 Important Notice: Kal class band rahegi!`",
+            parse_mode="Markdown"
+        )
+        return
+
+    target_message = update.message.reply_to_message if update.message.reply_to_message else update.message
+    user_ids = get_all_users()
+    
+    if not user_ids:
+        await update.message.reply_text("❌ No users found in the database.")
+        return
+
+    sent_count = 0
+    failed_count = 0
+
+    status_msg = await update.message.reply_text(f"🚀 Broadcasting message to {len(user_ids)} users...")
+
+    for uid in user_ids:
+        try:
+            if update.message.reply_to_message:
+                await context.bot.copy_message(
+                    chat_id=uid,
+                    from_chat_id=update.effective_chat.id,
+                    message_id=target_message.message_id
+                )
+            else:
+                await context.bot.send_message(chat_id=uid, text=message_text)
+            sent_count += 1
+        except Exception as e:
+            failed_count += 1
+
+    await status_msg.edit_text(
+        f"✅ **Broadcast Completed!**\n\n"
+        f"📤 Successfully sent: {sent_count}\n"
+        f"❌ Failed (Blocked bot): {failed_count}",
+        parse_mode="Markdown"
+    )
+
+
+# ==========================================
 # ADD NOTE
 # ==========================================
 
@@ -81,6 +170,7 @@ async def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     context.user_data.clear()
+    context.user_data["in_conversation"] = True
     await update.message.reply_text("📚 Enter Class")
     return CLASS
 
@@ -145,6 +235,7 @@ async def deletenote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("❌ You are not authorized.")
         return ConversationHandler.END
 
+    context.user_data["in_conversation"] = True
     await update.message.reply_text("🗑 Enter Topic Name")
     return DELETE_TOPIC
 
@@ -157,6 +248,7 @@ async def received_delete_topic(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await update.message.reply_text("❌ Topic not found.")
 
+    context.user_data.clear()
     return ConversationHandler.END
 
 
@@ -165,6 +257,7 @@ async def received_delete_topic(update: Update, context: ContextTypes.DEFAULT_TY
 # ==========================================
 
 async def note_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["in_conversation"] = True
     await update.message.reply_text("📝 Enter Class / Subject / Topic")
     return SEARCH_QUERY
 
@@ -175,6 +268,7 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     if not results:
         await update.message.reply_text("❌ No notes found.")
+        context.user_data.clear()
         return ConversationHandler.END
 
     await update.message.reply_text(f"🔍 {len(results)} Notes Found. Sending...")
@@ -204,6 +298,7 @@ async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as e:
             await update.message.reply_text(f"❌ Error sending file: {e}")
 
+    context.user_data.clear()
     return ConversationHandler.END
 
 
@@ -218,7 +313,6 @@ async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ No notes available.")
         return
 
-    # Group notes by Subject
     grouped_notes = {}
     for note in notes:
         if isinstance(note, sqlite3.Row) or hasattr(note, "keys"):
@@ -256,6 +350,7 @@ async def editnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ConversationHandler.END
 
     context.user_data.clear()
+    context.user_data["in_conversation"] = True
     await update.message.reply_text("📝 Enter Existing Topic")
     return EDIT_OLD_TOPIC
 
@@ -273,6 +368,7 @@ async def received_old_topic(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not matching_note:
         await update.message.reply_text("❌ Topic not found.")
+        context.user_data.clear()
         return ConversationHandler.END
 
     context.user_data["old_topic"] = matching_note
@@ -310,7 +406,7 @@ async def received_new_topic(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 # ==========================================
-# CONVERSATION HANDLERS
+# CONVERSATION & MESSAGE HANDLERS
 # ==========================================
 
 add_note_conv_handler = ConversationHandler(
