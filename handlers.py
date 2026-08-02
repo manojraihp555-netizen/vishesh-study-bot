@@ -98,7 +98,7 @@ async def received_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def received_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["topic"] = update.message.text.strip()
-    await update.message.reply_text("📎 Send Document or Photo")
+    await update.message.reply_text("📎 Send PDF or Photo")
     return FILE
 
 
@@ -107,10 +107,10 @@ async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     file_type = None
     file_name = ""
 
-    if update.message.document:
+    if update.message.document and update.message.document.mime_type == "application/pdf":
         file_id = update.message.document.file_id
         file_type = "document"
-        file_name = update.message.document.file_name
+        file_name = update.message.document.file_name or "document.pdf"
 
     elif update.message.photo:
         file_id = update.message.photo[-1].file_id
@@ -118,7 +118,7 @@ async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         file_name = "Photo"
 
     else:
-        await update.message.reply_text("❌ Send a Document or Photo only.")
+        await update.message.reply_text("❌ Please send only PDF or Photo.")
         return FILE
 
     add_note(
@@ -294,7 +294,7 @@ add_note_conv_handler = ConversationHandler(
         TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_topic)],
         FILE: [
             MessageHandler(
-                filters.Document.ALL | filters.PHOTO,
+                (filters.Document.PDF | filters.PHOTO | filters.TEXT) & ~filters.COMMAND,
                 received_file,
             )
         ],
