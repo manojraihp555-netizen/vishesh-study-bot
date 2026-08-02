@@ -68,8 +68,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ==========================================
 # ADD NOTE
 # ==========================================
-async
-def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+
+async def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
 
     if not 
