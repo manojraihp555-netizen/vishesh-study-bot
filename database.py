@@ -18,8 +18,7 @@ def init_db():
             file_id TEXT NOT NULL,
             file_type TEXT NOT NULL,
             file_name TEXT,
-            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(student_class, subject, topic, file_id)
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -40,12 +39,12 @@ def add_note(student_class, subject, topic, file_id, file_type, file_name):
 
     try:
         cursor.execute("""
-            INSERT OR IGNORE INTO notes
+            INSERT INTO notes
             (student_class, subject, topic, file_id, file_type, file_name)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (
-            student_class,
-            subject,
+            student_class.strip().title(),
+            subject.strip().title(),
             topic.strip(),
             file_id,
             file_type,
@@ -53,7 +52,7 @@ def add_note(student_class, subject, topic, file_id, file_type, file_name):
         ))
 
         conn.commit()
-        logger.info(f"Note added: {topic}")
+        logger.info(f"Note added successfully: {subject} - {topic}")
 
     except sqlite3.Error as e:
         logger.error(f"Database Error in add_note: {e}")
@@ -78,17 +77,17 @@ def search_notes(query):
                 file_name
             FROM notes
             WHERE
-                LOWER(TRIM(topic)) LIKE LOWER(TRIM(?))
-                OR LOWER(TRIM(subject)) LIKE LOWER(TRIM(?))
-                OR LOWER(TRIM(student_class)) LIKE LOWER(TRIM(?))
-            ORDER BY student_class, subject, topic
+                LOWER(topic) LIKE LOWER(?)
+                OR LOWER(subject) LIKE LOWER(?)
+                OR LOWER(student_class) LIKE LOWER(?)
         """, (
             f"%{query}%",
             f"%{query}%",
             f"%{query}%"
         ))
 
-        return cursor.fetchall()
+        results = cursor.fetchall()
+        return results
 
     except sqlite3.Error as e:
         logger.error(f"Database Error in search_notes: {e}")
@@ -103,17 +102,12 @@ def delete_note(topic):
     cursor = conn.cursor()
 
     try:
-        logger.info(f"Trying to delete topic: {topic}")
-
         cursor.execute("""
             DELETE FROM notes
-            WHERE LOWER(TRIM(topic)) = LOWER(TRIM(?))
+            WHERE LOWER(topic) = LOWER(?)
         """, (topic,))
 
         conn.commit()
-
-        logger.info(f"Rows deleted: {cursor.rowcount}")
-
         return cursor.rowcount > 0
 
     except sqlite3.Error as e:
@@ -139,10 +133,10 @@ def get_all_notes():
                 file_type,
                 file_name
             FROM notes
-            ORDER BY student_class, subject, topic
+            ORDER BY student_class ASC, subject ASC, topic ASC
         """)
-
-        return cursor.fetchall()
+        results = cursor.fetchall()
+        return results
 
     except sqlite3.Error as e:
         logger.error(f"Database Error in get_all_notes: {e}")
@@ -159,22 +153,11 @@ def update_note(old_topic, new_class, new_subject, new_topic):
     try:
         cursor.execute("""
             UPDATE notes
-            SET
-                student_class=?,
-                subject=?,
-                topic=?
-            WHERE LOWER(TRIM(topic)) = LOWER(TRIM(?))
-        """, (
-            new_class.strip(),
-            new_subject.strip(),
-            new_topic.strip(),
-            old_topic.strip()
-        ))
+            SET student_class = ?, subject = ?, topic = ?
+            WHERE LOWER(topic) = LOWER(?)
+        """, (new_class.strip().title(), new_subject.strip().title(), new_topic.strip(), old_topic))
 
         conn.commit()
-
-        logger.info(f"Rows updated: {cursor.rowcount}")
-
         return cursor.rowcount > 0
 
     except sqlite3.Error as e:
@@ -183,7 +166,3 @@ def update_note(old_topic, new_class, new_subject, new_topic):
 
     finally:
         conn.close()
-
-
-if __name__ == "__main__":
-    init_db()
