@@ -70,9 +70,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 
 async def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int: print("ADDNOTE COMMAND RECEIVED")
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ You are not authorized.")
-        return ConversationHandler.END
+    if not 
+is_admin(update.effective_user.id)
+:
+        await 
+    update.message.reply_text("❌ You are not authorized.")
+return ConversationHandler.END
 
     context.user_data.clear()
     await update.message.reply_text("📚 Enter Class")
