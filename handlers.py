@@ -1,167 +1,159 @@
-from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
-from admin import is_admin
-from database import add_note, delete_note
+# ==========================================
+# SAFE STATES (Conflict-free large integers)
+# ==========================================
+SEARCH_QUERY = 100
+EDIT_OLD_TOPIC = 101
+EDIT_NEW_CLASS = 102
+EDIT_NEW_SUBJECT = 103
+EDIT_NEW_TOPIC = 104
 
-# Define conversation states cleanly using range
-CLASS, SUBJECT, TOPIC, FILE, DELETE_TOPIC = range(5)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Existing /start command handler."""
-    await update.message.reply_text(
-        "📚 Welcome to Vishesh Study Bot!\n\n"
-        "Use /help to see available commands."
-    )
+# ==========================================
+# NEW FEATURE 1: Student Search Notes (/note)
+# ==========================================
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Existing /help command handler."""
-    await update.message.reply_text(
-        "📖 Available Commands:\n\n"
-        "/start - Start the bot\n"
-        "/help - Show help\n"
-        "/note - Search notes\n"
-        "/allnotes - View all notes\n"
-        "/addnote - Add a note (Admin)\n"
-        "/deletenote - Delete a note (Admin)\n"
-        "/myid - Get your Telegram ID"
-    )
+async def note_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point for /note conversation."""
+    await update.message.reply_text("📝 Enter Class / Subject / Topic")
+    return SEARCH_QUERY
 
-async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Existing /myid command handler."""
-    await update.message.reply_text(
-        f"🆔 Your Telegram ID: {update.effective_user.id}"
-    )
+async def received_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receives query, searches database safely, and sends up to 20 matching files with strict file_type filtering."""
+    query_text = update.message.text.strip()
+    results = search_notes(query_text) or []  # None safety
 
-# --- Add Note Conversation Handlers ---
-
-async def addnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Entry point for /addnote command."""
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return ConversationHandler.END
-
-    context.user_data.clear()
-    await update.message.reply_text("📚 Enter Class:")
-    return CLASS
-
-async def received_class(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store class and ask for subject."""
-    context.user_data["class"] = update.message.text.strip()
-    await update.message.reply_text("📖 Enter Subject:")
-    return SUBJECT
-
-async def received_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store subject and ask for topic."""
-    context.user_data["subject"] = update.message.text.strip()
-    await update.message.reply_text("📝 Enter Topic:")
-    return TOPIC
-
-async def received_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store topic and ask for file."""
-    context.user_data["topic"] = update.message.text.strip()
-    await update.message.reply_text("📎 Send PDF or Photo:")
-    return FILE
-
-async def received_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle incoming file (PDF document or Photo), save to DB, and end conversation."""
-    message = update.message
-    file_id = None
-    file_name = None
-    file_type = None
-
-    if message.document and message.document.mime_type == "application/pdf":
-        file_id = message.document.file_id
-        file_name = message.document.file_name or "document.pdf"
-        file_type = "document"
-    elif message.photo:
-        largest_photo = message.photo[-1]
-        file_id = largest_photo.file_id
-        file_name = "Photo"
-        file_type = "photo"
+    if not results:
+        await update.message.reply_text("❌ No notes found.")
     else:
-        await message.reply_text("❌ Please send only PDF or Photo.")
-        return FILE
+        total_notes = len(results)
+        await update.message.reply_text(f"🔍 {total_notes} Notes Found\n\nSending...")
 
-    student_class = context.user_data.get("class")
-    subject = context.user_data.get("subject")
-    topic = context.user_data.get("topic")
+        for note in results[:20]:
+            _, student_class, subject, topic, file_id, file_type, file_name = note
+            caption = (
+                f"📚 Class: {student_class}\n"
+                f"📖 Subject: {subject}\n"
+                f"📝 Topic: {topic}"
+            )
 
-    add_note(
-        student_class,
-        subject,
-        topic,
-        file_id,
-        file_type,
-        file_name
-    )
+            if file_type == "document":
+                await update.message.reply_document(document=file_id, caption=caption)
+            elif file_type == "photo":
+                await update.message.reply_photo(photo=file_id, caption=caption)
+            else:
+                continue
 
-    await message.reply_text(
-        f"✅ Note Added Successfully!\n\n"
-        f"📚 Class: {student_class}\n"
-        f"📖 Subject: {subject}\n"
-        f"📝 Topic: {topic}"
-    )
-    context.user_data.clear()
     return ConversationHandler.END
 
-# --- Delete Note Conversation Handlers ---
 
-async def deletenote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Entry point for /deletenote command."""
-    user_id = update.effective_user.id
+# ==========================================
+# NEW FEATURE 2: All Notes List (/allnotes)
+# ==========================================
+
+async def allnotes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Command handler for /allnotes to list available notes with character length check."""
+    notes = get_all_notes() or []
+
+    if not notes:
+        await update.message.reply_text("❌ No notes available.")
+    else:
+        response_lines = ["📚 Available Notes\n"]
+        for index, note in enumerate(notes, start=1):
+            _, student_class, subject, topic, _, _, _ = note
+            response_lines.append(
+                f"{index}.\n"
+                f"📚 Class: {student_class}\n"
+                f"📖 Subject: {subject}\n"
+                f"📝 Topic: {topic}\n"
+            )
+        
+        response = "\n".join(response_lines)
+        
+        # Telegram 4096 character limit protection cutoff
+        if len(response) > 4000:
+            response = response[:3900] + "\n\n..."
+            
+        await update.message.reply_text(response)
+
+
+# ==========================================
+# NEW FEATURE 3: Edit Note (/editnote - Admin Only)
+# ==========================================
+
+async def editnote_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point for /editnote conversation with admin verification."""
+    user_id = update.message.from_user.id
     if not is_admin(user_id):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return ConversationHandler.END
 
     context.user_data.clear()
-    await update.message.reply_text("🗑️ Enter Topic to delete:")
-    return DELETE_TOPIC
+    await update.message.reply_text("📝 Enter Existing Topic")
+    return EDIT_OLD_TOPIC
 
-async def received_delete_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Receive the topic, call delete_note, and give feedback."""
-    topic = update.message.text.strip()
-    
-    success = delete_note(topic)
+async def received_old_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Validates existence of existing topic in database."""
+    old_topic = update.message.text.strip()
+    notes = search_notes(old_topic) or []
+    matching_note = next((n for n in notes if n[3].lower() == old_topic.lower()), None)
+
+    if not matching_note:
+        await update.message.reply_text("❌ Topic not found.")
+        return ConversationHandler.END
+
+    context.user_data["edit_old_topic"] = matching_note[3]
+    await update.message.reply_text("📚 Enter New Class")
+    return EDIT_NEW_CLASS
+
+async def received_new_class(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores new class and prompts for new subject."""
+    context.user_data["edit_new_class"] = update.message.text.strip()
+    await update.message.reply_text("📖 Enter New Subject")
+    return EDIT_NEW_SUBJECT
+
+async def received_new_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores new subject and prompts for new topic."""
+    context.user_data["edit_new_subject"] = update.message.text.strip()
+    await update.message.reply_text("📝 Enter New Topic")
+    return EDIT_NEW_TOPIC
+
+async def received_new_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Finalizes data updates via update_note()."""
+    new_topic = update.message.text.strip()
+    old_topic = context.user_data.get("edit_old_topic")
+    new_class = context.user_data.get("edit_new_class")
+    new_subject = context.user_data.get("edit_new_subject")
+
+    success = update_note(old_topic, new_class, new_subject, new_topic)
 
     if success:
-        await update.message.reply_text("✅ Note Deleted Successfully.")
+        await update.message.reply_text("✅ Note Updated Successfully.")
     else:
-        await update.message.reply_text("❌ No note found with this topic.")
+        await update.message.reply_text("❌ Update Failed.")
 
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Shared Cancel Handler ---
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancel the current conversation."""
-    context.user_data.clear()
-    await update.message.reply_text("❌ Operation Cancelled.")
-    return ConversationHandler.END
+# ==========================================
+# NEW CONVERSATION HANDLER INSTANCES
+# ==========================================
 
-# --- Conversation Handlers Registration ---
-
-add_note_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("addnote", addnote_start)],
+note_conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("note", note_start)],
     states={
-        CLASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_class)],
-        SUBJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_subject)],
-        TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_topic)],
-        FILE: [
-            MessageHandler(
-                (filters.Document.PDF | filters.PHOTO | filters.TEXT) & ~filters.COMMAND,
-                received_file,
-            )
-        ],
+        SEARCH_QUERY: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_search_query)],
     },
     fallbacks=[CommandHandler("cancel", cancel)],
 )
 
-delete_note_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("deletenote", deletenote_start)],
+edit_note_conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("editnote", editnote_start)],
     states={
-        DELETE_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_delete_topic)],
+        EDIT_OLD_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_old_topic)],
+        EDIT_NEW_CLASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_new_class)],
+        EDIT_NEW_SUBJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_new_subject)],
+        EDIT_NEW_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_new_topic)],
     },
     fallbacks=[CommandHandler("cancel", cancel)],
 )
