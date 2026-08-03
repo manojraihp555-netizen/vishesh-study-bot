@@ -1,8 +1,6 @@
 import os
 
-TOKEN = os.getenv("TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
+TOKEN = "8757034548:AAHm8XgtJUJWTq4DdRr2UWwIdc3dJF2yJ8s"
 DB_FILE = "study_bot.db"
-
 ADMIN_IDS = [8119525298]
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
