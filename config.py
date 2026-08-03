@@ -1,4 +1,4 @@
 TOKEN = "8757034548:AAHm8XgtJUJWTq4DdRr2UWwIdc3dJF2yJ8s"
 DB_FILE = "study_bot.db"
 ADMIN_IDS = [8119525298]
-OPENAI_API_KEY = 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
+OPENAI_API_KEY = "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"
