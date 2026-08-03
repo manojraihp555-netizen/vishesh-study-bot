@@ -1,3 +1,4 @@
+import os
 from telegram import Update
 from telegram.ext import (
     ContextTypes,
@@ -9,7 +10,6 @@ from telegram.ext import (
 import sqlite3
 from openai import OpenAI
 
-from config import OPENAI_API_KEY
 from database import (
     add_note,
     delete_note,
@@ -21,8 +21,9 @@ from database import (
 )
 from admin import is_admin
 
-# OpenAI Client Initialize
-ai_client = OpenAI(api_key=OPENAI_API_KEY)
+# सुरक्षित तरीके से एनवायरनमेंट से OpenAI API Key लोड करें
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 CLASS = 0
 SUBJECT = 1
@@ -75,6 +76,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     user_question = update.message.text.strip()
     if user_question.startswith("/"):
+        return
+
+    if not ai_client:
+        await update.message.reply_text("❌ OpenAI API Key is not configured properly in server variables.")
         return
 
     await update.message.reply_chat_action("typing")
