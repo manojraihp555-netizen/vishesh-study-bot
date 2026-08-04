@@ -1,6 +1,11 @@
 import os
+from dotenv import load_dotenv
 
-TOKEN = "8757034548:AAHm8XgtJUJWTq4DdRr2UWwIdc3dJF2yJ8s"
+load_dotenv()
+
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+ADMIN_IDS = [
+    int(i) for i in os.getenv("ADMIN_IDS", "").split(",") if i.strip()
+]
+
 DB_FILE = "study_bot.db"
-ADMIN_IDS = [8119525298]
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
