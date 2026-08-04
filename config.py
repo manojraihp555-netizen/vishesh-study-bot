@@ -3,15 +3,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Telegram Bot Token
+# Bot token matching the import in main.py
 BOT_TOKEN = os.getenv("TOKEN")
 
-# Database
-DATABASE_NAME = "study_bot.db"
-
-# Admin IDs
+# Parse comma-separated admin IDs safely into a list of integers
 ADMIN_IDS = [
-    int(i)
-    for i in os.getenv("ADMIN_IDS", "").split(",")
+    int(i) for i in os.getenv("ADMIN_IDS", "").split(",")
     if i.strip()
 ]
+
+DB_FILE = "bot_database.db"
