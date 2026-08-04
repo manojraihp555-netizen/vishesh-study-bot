@@ -1,38 +1,31 @@
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
-from config import TOKEN
-from handlers import (
-    start,
-    help_command,
-    myid,
-    allnotes,
-    broadcast_start,
-    handle_direct_message,
-    add_note_conv_handler,
-    delete_note_conv_handler,
-    note_conv_handler,
-    edit_note_conv_handler,
-)
+import logging
+from telegram.ext import ApplicationBuilder
+from config import BOT_TOKEN
 from database import init_db
+from handlers import register_handlers
+
+# Enable logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 def main():
+    # Initialize the database tables
+    logger.info("Initializing database...")
     init_db()
-    app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("myid", myid))
-    app.add_handler(CommandHandler("allnotes", allnotes))
-    app.add_handler(CommandHandler("broadcast", broadcast_start))
+    # Build the Telegram application
+    logger.info("Starting bot application...")
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(add_note_conv_handler)
-    app.add_handler(delete_note_conv_handler)
-    app.add_handler(note_conv_handler)
-    app.add_handler(edit_note_conv_handler)
+    # Register all bot handlers from handlers.py
+    register_handlers(application)
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_direct_message))
-
-    print("Bot is running with ChatGPT and Broadcast features...")
-    app.run_polling()
+    # Start the Bot using polling
+    logger.info("Main.py: Bot is up and running. Polling started...")
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
