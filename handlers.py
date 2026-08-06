@@ -1,4 +1,7 @@
+import html
+import logging
 import re
+from functools import partial
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -27,8 +30,11 @@ from admin import (
     stats_cmd, 
     requests_cmd,
     backup_cmd,
-    restore_cmd
+    restore_cmd,
+    is_admin
 )
+
+logger = logging.getLogger(__name__)
 
 async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
     job_data = context.job.data
@@ -40,33 +46,61 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
         pass
 
 async def send_auto_deleting_files(update: Update, context: ContextTypes.DEFAULT_TYPE, files):
+    if not files:
+        return
+
     chat_id = update.effective_chat.id
+    
     for file in files:
-        increment_download_count(file["id"])
-        
-        is_photo = file["file_type"] and "image" in file["file_type"]
-        caption = f"📂 **{file['subject']}** - Chapter {file['chapter_number']}: {file['chapter_name']}\n*(This file will automatically delete in 5 minutes)*"
-        
-        if is_photo:
-            sent_msg = await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=file["file_id"],
-                caption=caption,
-                parse_mode="Markdown"
-            )
-        else:
-            sent_msg = await context.bot.send_document(
-                chat_id=chat_id,
-                document=file["file_id"],
-                caption=caption,
-                parse_mode="Markdown"
+        try:
+            file_type = str(file.get("file_type", "")).lower()
+            file_name = str(file.get("file_name", "")).lower()
+
+            is_photo = (
+                "image" in file_type
+                or "photo" in file_type
+                or file_name.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif"))
             )
             
-        context.job_queue.run_once(
-            delete_message_job,
-            300,
-            data={"chat_id": chat_id, "message_id": sent_msg.message_id}
-        )
+            # Safe HTML Escaping
+            subject = html.escape(str(file.get("subject", "")))
+            chapter_num = html.escape(str(file.get("chapter_number", "")))
+            chapter_name = html.escape(str(file.get("chapter_name", "")))
+            
+            caption = (
+                f"📂 <b>{subject}</b> - Chapter {chapter_num}: {chapter_name}\n"
+                "<i>(This file will automatically delete in 5 minutes)</i>"
+            )
+            
+            # 1. Send file first
+            if is_photo:
+                sent_msg = await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=file["file_id"],
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+            else:
+                sent_msg = await context.bot.send_document(
+                    chat_id=chat_id,
+                    document=file["file_id"],
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+                
+            # 2. Increment download count on successful delivery
+            increment_download_count(file["id"])
+
+            # 3. Schedule auto-deletion
+            context.job_queue.run_once(
+                delete_message_job,
+                300,
+                data={"chat_id": chat_id, "message_id": sent_msg.message_id}
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to send file ID {file.get('id')}: {e}")
+            continue
 
 async def track_user_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -114,7 +148,6 @@ async def myid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    from admin import is_admin
     if not is_admin(user_id):
         await update.message.reply_text("❌ Unauthorized.")
         return
@@ -137,7 +170,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"📢 Broadcast completed!\n✅ Success: {success}\n❌ Failed: {fail}")
 
-async def category_browse_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str):
+async def category_browse_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str = "notes"):
     await track_user_middleware(update, context)
     subjects = get_distinct_subjects(category)
     if not subjects:
@@ -196,24 +229,27 @@ async def anti_link_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         warning_msg = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"⚠️ {user.mention_markdown_v2()}, Telegram links are strictly prohibited in this group!\n⚠️ Warning Count: {warns}",
-            parse_mode="MarkdownV2"
+            text=f"⚠️ <a href='tg://user?id={user.id}'>{html.escape(user.first_name)}</a>, Telegram links are strictly prohibited in this group!\n⚠️ Warning Count: {warns}",
+            parse_mode="HTML"
         )
         context.job_queue.run_once(delete_message_job, 30, data={"chat_id": update.effective_chat.id, "message_id": warning_msg.message_id})
 
 # --- Smart Search & Group Interaction ---
 
 async def smart_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await track_user_middleware(update, context)
+    if not update.message or not update.message.text:
+        return
+
     text = update.message.text
+    tg_link_pattern = re.compile(r"(https?://)?(www\.)?(t\.me|telegram\.me|telegram\.dog)/", re.IGNORECASE)
+    if tg_link_pattern.search(text):
+        return  # Ignore deleted link messages
+
+    await track_user_middleware(update, context)
     chat_type = update.effective_chat.type
-    
     results = search_resources_smart(text)
     
     if results:
-        if chat_type in ["group", "supergroup"]:
-            await update.message.reply_text("Which notes do you need?")
-        
         sent_chapters = set()
         for res in results:
             key = (res["category"], res["subject"], res["chapter_number"])
@@ -251,7 +287,12 @@ async def inline_button_callback(update: Update, context: ContextTypes.DEFAULT_T
         _, category, subject, ch_num_str = data.split("_", 3)
         ch_num = int(ch_num_str)
         files = get_files_for_chapter(category, subject, ch_num)
-        await query.message.delete()
+        
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+
         await send_auto_deleting_files(update, context, files)
 
     elif data.startswith("backcat_"):
@@ -273,21 +314,21 @@ def register_handlers(application: Application):
     application.add_handler(CommandHandler("backup", backup_cmd))
     application.add_handler(CommandHandler("restore", restore_cmd))
     
-    # Category browse commands (using reliable lambdas)
-    application.add_handler(CommandHandler("note", lambda u, c: category_browse_cmd(u, c, "notes")))
-    application.add_handler(CommandHandler("shortnote", lambda u, c: category_browse_cmd(u, c, "shortnote")))
-    application.add_handler(CommandHandler("chiragbook", lambda u, c: category_browse_cmd(u, c, "chiragbook")))
-    application.add_handler(CommandHandler("formulasheet", lambda u, c: category_browse_cmd(u, c, "formulasheet")))
-    application.add_handler(CommandHandler("papers", lambda u, c: category_browse_cmd(u, c, "papers")))
+    # Category browse commands
+    application.add_handler(CommandHandler("note", partial(category_browse_cmd, category="notes")))
+    application.add_handler(CommandHandler("shortnote", partial(category_browse_cmd, category="shortnote")))
+    application.add_handler(CommandHandler("chiragbook", partial(category_browse_cmd, category="chiragbook")))
+    application.add_handler(CommandHandler("formulasheet", partial(category_browse_cmd, category="formulasheet")))
+    application.add_handler(CommandHandler("papers", partial(category_browse_cmd, category="papers")))
 
-    # Admin add resource commands (using reliable lambdas)
-    application.add_handler(CommandHandler("addnote", lambda u, c: add_resource_cmd(u, c, "notes")))
-    application.add_handler(CommandHandler("addshortnote", lambda u, c: add_resource_cmd(u, c, "shortnote")))
-    application.add_handler(CommandHandler("addchiragbook", lambda u, c: add_resource_cmd(u, c, "chiragbook")))
-    application.add_handler(CommandHandler("addformulasheet", lambda u, c: add_resource_cmd(u, c, "formulasheet")))
-    application.add_handler(CommandHandler("addpaper", lambda u, c: add_resource_cmd(u, c, "papers")))
+    # Admin add resource commands
+    application.add_handler(CommandHandler("addnote", partial(add_resource_cmd, category="notes")))
+    application.add_handler(CommandHandler("addshortnote", partial(add_resource_cmd, category="shortnote")))
+    application.add_handler(CommandHandler("addchiragbook", partial(add_resource_cmd, category="chiragbook")))
+    application.add_handler(CommandHandler("addformulasheet", partial(add_resource_cmd, category="formulasheet")))
+    application.add_handler(CommandHandler("addpaper", partial(add_resource_cmd, category="papers")))
 
-    # Admin edit command wrappers (using reliable lambdas)
+    # Admin edit command wrappers
     categories_map = [
         ("note", "notes"), 
         ("shortnote", "shortnote"), 
@@ -299,7 +340,7 @@ def register_handlers(application: Application):
         del_cmd = "deletenote" if prefix == "note" else f"delete{prefix}"
         edit_cmd = f"edit{prefix}"
         application.add_handler(CommandHandler(del_cmd, delete_resource_cmd))
-        application.add_handler(CommandHandler(edit_cmd, lambda u, c, cat=cat_name: edit_resource_cmd(u, c, cat)))
+        application.add_handler(CommandHandler(edit_cmd, partial(edit_resource_cmd, category=cat_name)))
 
     application.add_handler(ChatMemberHandler(track_members, ChatMemberHandler.CHAT_MEMBER))
 
