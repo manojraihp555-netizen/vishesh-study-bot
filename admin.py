@@ -1,11 +1,13 @@
 import sqlite3
 
+DB_NAME = "bot_data.db"
+
 def get_connection():
     """
     Database connection helper with row_factory enabled 
     for dict-like column access.
     """
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -46,7 +48,7 @@ def soft_delete_resource(target):
 def get_top_downloads_active(limit=5):
     """
     Fetches top active resources based on download count.
-    Uses correct column name 'downloads'.
+    Uses standardized column name 'download_count'.
     """
     conn = get_connection()
     try:
@@ -56,7 +58,7 @@ def get_top_downloads_active(limit=5):
             SELECT *
             FROM resources
             WHERE is_active = 1
-            ORDER BY downloads DESC
+            ORDER BY download_count DESC
             LIMIT ?
         """, (limit,))
 
