@@ -1,31 +1,49 @@
+import os
 import logging
+from dotenv import load_dotenv
 from telegram.ext import ApplicationBuilder
-from config import BOT_TOKEN
-from database import init_db
 from handlers import register_handlers
+from database import init_db
 
-# Enable logging
+# Configure logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-def main():
-    # Initialize the database tables
-    logger.info("Initializing database...")
-    init_db()
+# Load environment variables from .env file
+load_dotenv()
 
-    # Build the Telegram application
-    logger.info("Starting bot application...")
+# Get Bot Token from environment variable or set fallback
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+
+async def error_handler(update, context):
+    """Global error handler to prevent bot crash on unhandled exceptions."""
+    logger.error(f"Update {update} caused error: {context.error}", exc_info=context.error)
+
+def main():
+    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or not BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN missing! Please set your token in .env or main.py")
+        return
+
+    # 1. Initialize SQLite Database tables
+    init_db()
+    logger.info("✅ Database initialized successfully.")
+
+    # 2. Build python-telegram-bot Application
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Register all bot handlers from handlers.py
+    # 3. Register command and message handlers
     register_handlers(application)
+    logger.info("✅ All handlers registered successfully.")
 
-    # Start the Bot using polling
-    logger.info("Main.py: Bot is up and running. Polling started...")
-    application.run_polling()
+    # 4. Add global error handler
+    application.add_error_handler(error_handler)
+
+    # 5. Start Polling
+    logger.info("🚀 Bot is running...")
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
