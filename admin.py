@@ -1,4 +1,21 @@
+import sqlite3
+
+def get_connection():
+    """
+    Database connection helper with row_factory enabled 
+    for dict-like column access.
+    """
+    conn = sqlite3.connect("database.db")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def soft_delete_resource(target):
+    """
+    Soft deletes a resource by setting is_active = 0.
+    Accepts integer ID or chapter name string.
+    Returns True if record was updated, False otherwise.
+    """
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -14,7 +31,9 @@ def soft_delete_resource(target):
                 (str(target).strip().lower(),)
             )
 
+        affected_rows = cursor.rowcount
         conn.commit()
+        return affected_rows > 0
 
     except Exception:
         conn.rollback()
@@ -25,6 +44,10 @@ def soft_delete_resource(target):
 
 
 def get_top_downloads_active(limit=5):
+    """
+    Fetches top active resources based on download count.
+    Uses correct column name 'downloads'.
+    """
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -44,6 +67,9 @@ def get_top_downloads_active(limit=5):
 
 
 def get_category_counts_active():
+    """
+    Returns a dictionary mapping category names to total active resource count.
+    """
     conn = get_connection()
     try:
         cursor = conn.cursor()
